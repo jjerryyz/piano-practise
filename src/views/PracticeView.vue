@@ -3,6 +3,7 @@
     <header class="page-header">
       <button class="back-btn" @click="goBack">&lt;</button>
       <span class="title">{{ practice.currentGroup?.label ?? '练习' }}</span>
+      <MidiIndicator :status="midiStatus" :device-name="midiDevice" />
     </header>
 
     <template v-if="!practice.isFinished">
@@ -75,13 +76,19 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePracticeStore } from '../stores/practice'
 import { groupPrimaryOctave } from '../data/noteRanges'
+import { useMidi } from '../composables/useMidi'
 import StaffNote from '../components/StaffNote.vue'
 import PianoKeyboard from '../components/PianoKeyboard.vue'
 import ScoreBoard from '../components/ScoreBoard.vue'
 import FeedbackToast from '../components/FeedbackToast.vue'
+import MidiIndicator from '../components/MidiIndicator.vue'
 
 const router = useRouter()
 const practice = usePracticeStore()
+
+const { status: midiStatus, deviceName: midiDevice } = useMidi({
+  onNoteOn(midi) { onAnswer(midi) },
+})
 
 const initialOctave = computed(() => {
   if (!practice.currentGroup) return 4

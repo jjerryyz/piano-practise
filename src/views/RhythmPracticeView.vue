@@ -3,6 +3,7 @@
     <header class="page-header">
       <button class="back-btn" @click="goBack">&lt;</button>
       <span class="title">{{ rhythm.currentPattern?.label ?? '节奏练习' }}</span>
+      <MidiIndicator :status="midiStatus" :device-name="midiDevice" />
     </header>
 
     <!-- Ready screen: preview + BPM adjust -->
@@ -143,10 +144,16 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRhythmStore } from '../stores/rhythm'
+import { useMidi } from '../composables/useMidi'
 import RhythmStaff from '../components/RhythmStaff.vue'
+import MidiIndicator from '../components/MidiIndicator.vue'
 
 const router = useRouter()
 const rhythm = useRhythmStore()
+
+const { status: midiStatus, deviceName: midiDevice } = useMidi({
+  onNoteOn() { onTap() },
+})
 
 const tapActive = ref(false)
 const lastRating = ref<string | null>(null)
