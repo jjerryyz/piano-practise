@@ -19,39 +19,16 @@
     </div>
 
     <div class="groups-container">
-      <section v-if="commonGroups.length" class="group-section">
-        <h3 class="section-title">常用音符</h3>
+      <section v-for="sec in sections" :key="sec.title" class="group-section">
+        <h3 class="section-title">{{ sec.title }}</h3>
         <div
-          v-for="group in commonGroups"
+          v-for="group in sec.groups"
           :key="group.id"
           class="group-card"
           @click="startGroup(group)"
         >
           <div class="group-icon">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--primary)">
-              <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
-            </svg>
-          </div>
-          <div class="group-info">
-            <span class="group-label">{{ group.label }}</span>
-            <span class="group-sublabel">{{ group.sublabel }}</span>
-          </div>
-          <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </div>
-      </section>
-
-      <section v-if="otherGroups.length" class="group-section">
-        <h3 class="section-title">其他音符</h3>
-        <div
-          v-for="group in otherGroups"
-          :key="group.id"
-          class="group-card"
-          @click="startGroup(group)"
-        >
-          <div class="group-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--primary-light)">
               <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
             </svg>
           </div>
@@ -94,16 +71,17 @@ const tabs = [
 
 const activeDifficulty = ref<Difficulty>('beginner')
 
-const allGroups = computed(() => getGroupsByDifficulty(activeDifficulty.value))
+interface Section { title: string; groups: NoteGroup[] }
 
-const commonGroups = computed(() => {
-  const commonOctaves = [2, 3, 4, 5, 6]
-  return allGroups.value.filter(g => commonOctaves.includes(g.octave))
-})
-
-const otherGroups = computed(() => {
-  const commonOctaves = [2, 3, 4, 5, 6]
-  return allGroups.value.filter(g => !commonOctaves.includes(g.octave))
+const sections = computed<Section[]>(() => {
+  const groups = getGroupsByDifficulty(activeDifficulty.value)
+  const map = new Map<string, NoteGroup[]>()
+  for (const g of groups) {
+    const arr = map.get(g.section) ?? []
+    arr.push(g)
+    map.set(g.section, arr)
+  }
+  return Array.from(map.entries()).map(([title, groups]) => ({ title, groups }))
 })
 
 function startGroup(group: NoteGroup) {
@@ -156,7 +134,7 @@ function startGroup(group: NoteGroup) {
   margin: 16px 0 8px 4px;
 }
 
-.section-title:first-child {
+.group-section:first-child .section-title {
   margin-top: 0;
 }
 

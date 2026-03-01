@@ -25,8 +25,7 @@
 
       <div class="keyboard-area">
         <PianoKeyboard
-          :octaves="keyboardOctaves"
-          :show-accidentals="showBlackKeys"
+          :initial-octave="initialOctave"
           @note-press="onAnswer"
         />
       </div>
@@ -74,6 +73,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePracticeStore } from '../stores/practice'
+import { groupPrimaryOctave } from '../data/noteRanges'
 import StaffNote from '../components/StaffNote.vue'
 import PianoKeyboard from '../components/PianoKeyboard.vue'
 import ScoreBoard from '../components/ScoreBoard.vue'
@@ -82,13 +82,9 @@ import FeedbackToast from '../components/FeedbackToast.vue'
 const router = useRouter()
 const practice = usePracticeStore()
 
-const keyboardOctaves = computed(() => {
-  if (!practice.currentGroup) return [4]
-  return [practice.currentGroup.octave]
-})
-
-const showBlackKeys = computed(() => {
-  return practice.currentGroup?.includeAccidentals ?? false
+const initialOctave = computed(() => {
+  if (!practice.currentGroup) return 4
+  return groupPrimaryOctave(practice.currentGroup)
 })
 
 function onAnswer(midi: number) {

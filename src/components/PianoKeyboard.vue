@@ -1,31 +1,48 @@
 <template>
   <div class="piano-wrapper">
-    <div class="octave-tabs">
-      <button
-        v-for="oct in availableOctaves"
+    <div class="octave-strip">
+      <div
+        v-for="oct in ALL_OCTAVES"
         :key="oct"
-        :class="['octave-tab', { active: oct === activeOctave }]"
+        :class="['oct-cell', { active: oct === activeOctave }]"
         @click="activeOctave = oct"
       >
-        {{ octaveLabel(oct) }}
-      </button>
+        <div class="mini-piano">
+          <span class="mini-w" v-for="i in 7" :key="i"></span>
+        </div>
+        <span class="oct-name">{{ octaveLabel(oct) }}</span>
+      </div>
     </div>
-    <div class="keyboard">
+
+    <div class="keyboard" ref="kbRef">
       <div
-        v-for="key in currentKeys"
-        :key="key.midi"
-        :class="['key', key.color, { pressed: pressedKey === key.midi }]"
-        @pointerdown.prevent="onKeyDown(key.midi)"
+        v-for="wk in whiteKeys"
+        :key="wk.midi"
+        :class="['key white', { pressed: pressedKey === wk.midi }]"
+        @pointerdown.prevent="onKeyDown(wk.midi)"
         @pointerup.prevent="onKeyUp"
+        @pointerleave="onKeyUp"
       >
-        <span class="key-label">{{ key.label }}</span>
+        <span class="key-label">{{ wk.label }}</span>
+      </div>
+
+      <div
+        v-for="bk in blackKeys"
+        :key="bk.midi"
+        :class="['key black', { pressed: pressedKey === bk.midi }]"
+        :style="{ left: bk.left }"
+        @pointerdown.prevent="onKeyDown(bk.midi)"
+        @pointerup.prevent="onKeyUp"
+        @pointerleave="onKeyUp"
+      >
+        <span class="key-label">{{ bk.label }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { noteToMidi, noteDisplayName, type NoteLetter } from '../lib/musicTheory'
 
 const emit = defineEmits<{
@@ -33,21 +50,20 @@ const emit = defineEmits<{
 }>()
 
 const props = defineProps<{
-  /** Which octaves to show tabs for */
-  octaves?: number[]
-  /** Whether to show black keys */
-  showAccidentals?: boolean
+  /** Octave to select initially */
+  initialOctave?: number
 }>()
 
-interface PianoKey {
-  midi: number
-  label: string
-  color: 'white' | 'black'
-}
-
-const availableOctaves = computed(() => props.octaves ?? [3, 4, 5])
-const activeOctave = ref(availableOctaves.value.includes(4) ? 4 : availableOctaves.value[0])
+const ALL_OCTAVES = [2, 3, 4, 5, 6]
+const activeOctave = ref(props.initialOctave ?? 4)
 const pressedKey = ref<number | null>(null)
+
+watch(() => props.initialOctave, (v) => {
+  if (v !== undefined) activeOctave.value = v
+})
+
+interface WhiteKey { midi: number; label: string }
+interface BlackKey { midi: number; label: string; left: string }
 
 function octaveLabel(oct: number): string {
   const labels: Record<number, string> = {
@@ -56,38 +72,35 @@ function octaveLabel(oct: number): string {
   return labels[oct] ?? `${oct}`
 }
 
-const WHITE_NOTES: NoteLetter[] = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
-const BLACK_NOTES: { letter: NoteLetter; acc: 'sharp' }[] = [
-  { letter: 'C', acc: 'sharp' },
-  { letter: 'D', acc: 'sharp' },
-  { letter: 'F', acc: 'sharp' },
-  { letter: 'G', acc: 'sharp' },
-  { letter: 'A', acc: 'sharp' },
+const WHITE_LETTERS: NoteLetter[] = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
+
+const BLACK_DEFS: { letter: NoteLetter; whiteIndex: number }[] = [
+  { letter: 'C', whiteIndex: 0 },
+  { letter: 'D', whiteIndex: 1 },
+  { letter: 'F', whiteIndex: 3 },
+  { letter: 'G', whiteIndex: 4 },
+  { letter: 'A', whiteIndex: 5 },
 ]
 
-const currentKeys = computed<PianoKey[]>(() => {
+const whiteKeys = computed<WhiteKey[]>(() => {
   const oct = activeOctave.value
-  const keys: PianoKey[] = []
+  return WHITE_LETTERS.map(l => ({
+    midi: noteToMidi(l, oct, 'none'),
+    label: noteDisplayName(l, oct, 'none'),
+  }))
+})
 
-  for (const letter of WHITE_NOTES) {
-    keys.push({
-      midi: noteToMidi(letter, oct, 'none'),
-      label: noteDisplayName(letter, oct, 'none'),
-      color: 'white',
-    })
-  }
-
-  if (props.showAccidentals !== false) {
-    for (const bn of BLACK_NOTES) {
-      keys.push({
-        midi: noteToMidi(bn.letter, oct, 'sharp'),
-        label: noteDisplayName(bn.letter, oct, 'sharp'),
-        color: 'black',
-      })
+const blackKeys = computed<BlackKey[]>(() => {
+  const oct = activeOctave.value
+  const bkWidth = 8.5
+  return BLACK_DEFS.map(def => {
+    const boundary = ((def.whiteIndex + 1) / 7) * 100
+    return {
+      midi: noteToMidi(def.letter, oct, 'sharp'),
+      label: noteDisplayName(def.letter, oct, 'sharp'),
+      left: `${boundary - bkWidth / 2}%`,
     }
-  }
-
-  return keys
+  })
 })
 
 function onKeyDown(midi: number) {
@@ -109,44 +122,70 @@ function onKeyUp() {
   touch-action: manipulation;
 }
 
-.octave-tabs {
+/* ---- octave overview strip ---- */
+.octave-strip {
   display: flex;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 4px;
+  padding: 6px 8px;
   overflow-x: auto;
+  scrollbar-width: none;
 }
+.octave-strip::-webkit-scrollbar { display: none; }
 
-.octave-tab {
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 600;
-  background: var(--bg);
+.oct-cell {
+  flex: 1 0 0;
+  min-width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 4px 4px;
+  border-radius: 8px;
   border: 1.5px solid var(--border);
-  white-space: nowrap;
+  background: var(--bg);
+  cursor: pointer;
   transition: all 0.15s;
 }
-
-.octave-tab.active {
+.oct-cell.active {
   background: var(--primary);
-  color: #fff;
   border-color: var(--primary);
 }
+.oct-cell.active .oct-name { color: #fff; }
+.oct-cell.active .mini-w { background: rgba(255,255,255,.6); }
 
+.mini-piano {
+  display: flex;
+  gap: 1px;
+  height: 10px;
+}
+.mini-w {
+  width: 5px;
+  background: #cbd5e1;
+  border-radius: 1px;
+}
+
+.oct-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+/* ---- main keyboard ---- */
 .keyboard {
   position: relative;
   display: flex;
-  height: 140px;
-  padding: 0 4px;
+  height: 130px;
+  padding: 0 2px;
 }
 
 .key {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 10px;
-  border-radius: 0 0 8px 8px;
-  transition: background 0.08s;
+  padding-bottom: 8px;
+  border-radius: 0 0 7px 7px;
+  transition: background 0.06s;
   cursor: pointer;
 }
 
@@ -157,32 +196,19 @@ function onKeyUp() {
   margin: 0 1px;
   z-index: 1;
 }
-
-.key.white.pressed {
-  background: #e0e7ff;
-}
+.key.white.pressed { background: #e0e7ff; }
 
 .key.black {
   position: absolute;
-  width: calc(100% / 7 * 0.58);
+  width: 8.5%;
   height: 55%;
   background: #1e293b;
   color: #fff;
   z-index: 2;
   border: 1px solid #0f172a;
-  font-size: 11px;
 }
-
-.key.black.pressed {
-  background: #475569;
-}
-
-/* Position black keys */
-.key.black:nth-child(8) { left: calc(100% / 7 * 1 - 100% / 7 * 0.29 + 4px); }
-.key.black:nth-child(9) { left: calc(100% / 7 * 2 - 100% / 7 * 0.29 + 4px); }
-.key.black:nth-child(10) { left: calc(100% / 7 * 4 - 100% / 7 * 0.29 + 4px); }
-.key.black:nth-child(11) { left: calc(100% / 7 * 5 - 100% / 7 * 0.29 + 4px); }
-.key.black:nth-child(12) { left: calc(100% / 7 * 6 - 100% / 7 * 0.29 + 4px); }
+.key.black .key-label { font-size: 10px; }
+.key.black.pressed { background: #475569; }
 
 .key-label {
   font-size: 12px;
