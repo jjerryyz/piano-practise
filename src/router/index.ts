@@ -5,13 +5,33 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'home',
+      name: 'mainMenu',
+      component: () => import('../views/MainMenuView.vue'),
+    },
+    {
+      path: '/note-practice',
+      name: 'notePractice',
       component: () => import('../views/HomeView.vue'),
     },
     {
       path: '/practice',
       name: 'practice',
       component: () => import('../views/PracticeView.vue'),
+    },
+    {
+      path: '/rhythm',
+      name: 'rhythmHome',
+      component: () => import('../views/RhythmHomeView.vue'),
+    },
+    {
+      path: '/rhythm/practice',
+      name: 'rhythmPractice',
+      component: () => import('../views/RhythmPracticeView.vue'),
+    },
+    {
+      path: '/metronome',
+      name: 'metronome',
+      component: () => import('../views/MetronomeView.vue'),
     },
     {
       path: '/wrong-book',

@@ -2,7 +2,7 @@
   <div class="page">
     <header class="page-header">
       <button class="back-btn" @click="router.push('/')">&lt;</button>
-      <span class="title">单音练习</span>
+      <span class="title">节奏训练</span>
     </header>
 
     <div class="tabs">
@@ -18,34 +18,27 @@
       <section v-for="sec in sections" :key="sec.title" class="group-section">
         <h3 class="section-title">{{ sec.title }}</h3>
         <div
-          v-for="group in sec.groups"
-          :key="group.id"
+          v-for="pattern in sec.patterns"
+          :key="pattern.id"
           class="group-card"
-          @click="startGroup(group)"
+          @click="startPattern(pattern)"
         >
-          <div class="group-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--primary)">
-              <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
+          <div class="group-icon rhythm-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#f59e0b">
+              <rect x="4" y="10" width="3" height="10" rx="1" />
+              <rect x="9" y="6" width="3" height="14" rx="1" />
+              <rect x="14" y="12" width="3" height="8" rx="1" />
             </svg>
           </div>
           <div class="group-info">
-            <span class="group-label">{{ group.label }}</span>
-            <span class="group-sublabel">{{ group.sublabel }}</span>
+            <span class="group-label">{{ pattern.label }}</span>
+            <span class="group-sublabel">{{ pattern.sublabel }} | BPM {{ pattern.bpm }}</span>
           </div>
           <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2">
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </div>
       </section>
-
-      <div class="bottom-actions">
-        <button class="action-btn" @click="router.push('/wrong-book')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
-          错题本
-        </button>
-      </div>
     </div>
   </div>
 </template>
@@ -53,36 +46,36 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getGroupsByDifficulty, type Difficulty, type NoteGroup } from '../data/noteRanges'
-import { usePracticeStore } from '../stores/practice'
+import { getRhythmByDifficulty, type RhythmDifficulty, type RhythmPattern } from '../data/rhythmPatterns'
+import { useRhythmStore } from '../stores/rhythm'
 
 const router = useRouter()
-const practice = usePracticeStore()
+const rhythm = useRhythmStore()
 
 const tabs = [
-  { id: 'beginner' as Difficulty, label: '初级' },
-  { id: 'intermediate' as Difficulty, label: '中级' },
-  { id: 'advanced' as Difficulty, label: '高级' },
+  { id: 'beginner' as RhythmDifficulty, label: '初级' },
+  { id: 'intermediate' as RhythmDifficulty, label: '中级' },
+  { id: 'advanced' as RhythmDifficulty, label: '高级' },
 ]
 
-const activeDifficulty = ref<Difficulty>('beginner')
+const activeDifficulty = ref<RhythmDifficulty>('beginner')
 
-interface Section { title: string; groups: NoteGroup[] }
+interface Section { title: string; patterns: RhythmPattern[] }
 
 const sections = computed<Section[]>(() => {
-  const groups = getGroupsByDifficulty(activeDifficulty.value)
-  const map = new Map<string, NoteGroup[]>()
-  for (const g of groups) {
-    const arr = map.get(g.section) ?? []
-    arr.push(g)
-    map.set(g.section, arr)
+  const patterns = getRhythmByDifficulty(activeDifficulty.value)
+  const map = new Map<string, RhythmPattern[]>()
+  for (const p of patterns) {
+    const arr = map.get(p.section) ?? []
+    arr.push(p)
+    map.set(p.section, arr)
   }
-  return Array.from(map.entries()).map(([title, groups]) => ({ title, groups }))
+  return Array.from(map.entries()).map(([title, patterns]) => ({ title, patterns }))
 })
 
-function startGroup(group: NoteGroup) {
-  practice.startPractice(group)
-  router.push('/practice')
+function startPattern(pattern: RhythmPattern) {
+  rhythm.preparePattern(pattern)
+  router.push('/rhythm/practice')
 }
 </script>
 
@@ -106,7 +99,7 @@ function startGroup(group: NoteGroup) {
 
 .tab.active {
   color: var(--text);
-  border-bottom-color: var(--primary);
+  border-bottom-color: #f59e0b;
   font-weight: 600;
 }
 
@@ -148,11 +141,14 @@ function startGroup(group: NoteGroup) {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: #eef2ff;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.rhythm-icon {
+  background: #fef3c7;
 }
 
 .group-info {
@@ -174,22 +170,5 @@ function startGroup(group: NoteGroup) {
 
 .arrow {
   flex-shrink: 0;
-}
-
-.bottom-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 24px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  font-size: 14px;
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
 }
 </style>
