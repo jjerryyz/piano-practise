@@ -5,7 +5,7 @@
         v-for="oct in ALL_OCTAVES"
         :key="oct"
         :class="['oct-cell', { active: oct === activeOctave }]"
-        @click="activeOctave = oct"
+        @click="scrollToOctave(oct, true)"
       >
         <div class="mini-piano">
           <span class="mini-w" v-for="i in 7" :key="i"></span>
@@ -14,35 +14,39 @@
       </div>
     </div>
 
-    <div class="keyboard" ref="kbRef">
-      <div
-        v-for="wk in whiteKeys"
-        :key="wk.midi"
-        :class="['key white', { pressed: activePressedMidi === wk.midi }]"
-        @pointerdown.prevent="onKeyDown(wk.midi)"
-        @pointerup.prevent="onKeyUp"
-        @pointerleave="onKeyUp"
-      >
-        <span class="key-label">{{ wk.label }}</span>
-      </div>
+    <div ref="scrollRef" class="keyboard-scroll" @scroll="onScroll">
+      <div class="keyboard-track" :style="{ width: `${whiteKeys.length * WHITE_KEY_WIDTH}px` }">
+        <div class="white-row">
+          <div
+            v-for="wk in whiteKeys"
+            :key="wk.midi"
+            :class="['key white', { pressed: activePressedMidi === wk.midi }]"
+            @pointerdown.prevent="onKeyDown(wk.midi)"
+            @pointerup.prevent="onKeyUp"
+            @pointerleave="onKeyUp"
+          >
+            <span class="key-label">{{ wk.label }}</span>
+          </div>
+        </div>
 
-      <div
-        v-for="bk in blackKeys"
-        :key="bk.midi"
-        :class="['key black', { pressed: activePressedMidi === bk.midi }]"
-        :style="{ left: bk.left }"
-        @pointerdown.prevent="onKeyDown(bk.midi)"
-        @pointerup.prevent="onKeyUp"
-        @pointerleave="onKeyUp"
-      >
-        <span class="key-label">{{ bk.label }}</span>
+        <div
+          v-for="bk in blackKeys"
+          :key="bk.midi"
+          :class="['key black', { pressed: activePressedMidi === bk.midi }]"
+          :style="{ left: `${bk.leftPx}px` }"
+          @pointerdown.prevent="onKeyDown(bk.midi)"
+          @pointerup.prevent="onKeyUp"
+          @pointerleave="onKeyUp"
+        >
+          <span class="key-label">{{ bk.label }}</span>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { noteToMidi, noteDisplayName, type NoteLetter } from '../lib/musicTheory'
 
 const emit = defineEmits<{
@@ -57,16 +61,15 @@ const props = defineProps<{
 }>()
 
 const ALL_OCTAVES = [2, 3, 4, 5, 6]
+const WHITE_KEY_WIDTH = 44
+const BLACK_KEY_WIDTH = 26
 const activeOctave = ref(props.initialOctave ?? 4)
 const pressedKey = ref<number | null>(null)
 const activePressedMidi = computed(() => pressedKey.value ?? props.activeMidi ?? null)
-
-watch(() => props.initialOctave, (v) => {
-  if (v !== undefined) activeOctave.value = v
-})
+const scrollRef = ref<HTMLDivElement>()
 
 interface WhiteKey { midi: number; label: string }
-interface BlackKey { midi: number; label: string; left: string }
+interface BlackKey { midi: number; label: string; leftPx: number }
 
 function octaveLabel(oct: number): string {
   const labels: Record<number, string> = {
@@ -86,25 +89,57 @@ const BLACK_DEFS: { letter: NoteLetter; whiteIndex: number }[] = [
 ]
 
 const whiteKeys = computed<WhiteKey[]>(() => {
-  const oct = activeOctave.value
-  return WHITE_LETTERS.map(l => ({
-    midi: noteToMidi(l, oct, 'none'),
-    label: noteDisplayName(l, oct, 'none'),
-  }))
+  const result: WhiteKey[] = []
+  for (const oct of ALL_OCTAVES) {
+    for (const l of WHITE_LETTERS) {
+      result.push({
+        midi: noteToMidi(l, oct, 'none'),
+        label: l === 'C' ? noteDisplayName(l, oct, 'none') : '',
+      })
+    }
+  }
+  return result
 })
 
 const blackKeys = computed<BlackKey[]>(() => {
-  const oct = activeOctave.value
-  const bkWidth = 8.5
-  return BLACK_DEFS.map(def => {
-    const boundary = ((def.whiteIndex + 1) / 7) * 100
-    return {
-      midi: noteToMidi(def.letter, oct, 'sharp'),
-      label: noteDisplayName(def.letter, oct, 'sharp'),
-      left: `${boundary - bkWidth / 2}%`,
+  const result: BlackKey[] = []
+  for (let octIdx = 0; octIdx < ALL_OCTAVES.length; octIdx++) {
+    const oct = ALL_OCTAVES[octIdx]
+    for (const def of BLACK_DEFS) {
+      const globalWhiteIdx = octIdx * 7 + def.whiteIndex
+      const boundaryX = (globalWhiteIdx + 1) * WHITE_KEY_WIDTH
+      result.push({
+        midi: noteToMidi(def.letter, oct, 'sharp'),
+        label: noteDisplayName(def.letter, oct, 'sharp'),
+        leftPx: boundaryX - BLACK_KEY_WIDTH / 2,
+      })
     }
-  })
+  }
+  return result
 })
+
+function clampOctave(oct: number): number {
+  return Math.min(ALL_OCTAVES[ALL_OCTAVES.length - 1], Math.max(ALL_OCTAVES[0], oct))
+}
+
+function scrollToOctave(oct: number, smooth = false) {
+  const target = clampOctave(oct)
+  activeOctave.value = target
+  const scroller = scrollRef.value
+  if (!scroller) return
+  const startWhiteIdx = (target - ALL_OCTAVES[0]) * 7
+  const left = startWhiteIdx * WHITE_KEY_WIDTH
+  scroller.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' })
+}
+
+function onScroll() {
+  const scroller = scrollRef.value
+  if (!scroller) return
+  const centerX = scroller.scrollLeft + scroller.clientWidth / 2
+  const whiteIdx = Math.floor(centerX / WHITE_KEY_WIDTH)
+  const oct = clampOctave(ALL_OCTAVES[0] + Math.floor(whiteIdx / 7))
+  activeOctave.value = oct
+}
 
 function onKeyDown(midi: number) {
   pressedKey.value = midi
@@ -114,12 +149,22 @@ function onKeyDown(midi: number) {
 function onKeyUp() {
   pressedKey.value = null
 }
+
+watch(() => props.initialOctave, (v) => {
+  if (v !== undefined) scrollToOctave(v)
+})
+
+onMounted(() => {
+  nextTick(() => {
+    scrollToOctave(props.initialOctave ?? 4)
+  })
+})
 </script>
 
 <style scoped>
 .piano-wrapper {
   width: 100%;
-  max-width: 500px;
+  max-width: 100%;
   margin: 0 auto;
   user-select: none;
   touch-action: manipulation;
@@ -174,12 +219,28 @@ function onKeyUp() {
   line-height: 1;
 }
 
-/* ---- main keyboard ---- */
-.keyboard {
-  position: relative;
+/* ---- full keyboard ---- */
+.keyboard-scroll {
   display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  padding-bottom: 2px;
+}
+
+.keyboard-track {
+  position: relative;
   height: 130px;
-  padding: 0 2px;
+  flex: 0 0 auto;
+}
+
+.white-row {
+  display: flex;
+  height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .key {
@@ -193,21 +254,24 @@ function onKeyUp() {
 }
 
 .key.white {
-  flex: 1;
+  position: relative;
+  width: 44px;
+  min-width: 44px;
   background: #fff;
   border: 1px solid #d1d5db;
-  margin: 0 1px;
+  box-sizing: border-box;
   z-index: 1;
 }
 .key.white.pressed { background: #e0e7ff; }
 
 .key.black {
   position: absolute;
-  width: 8.5%;
+  top: 0;
+  width: 26px;
   height: 55%;
   background: #1e293b;
   color: #fff;
-  z-index: 2;
+  z-index: 5;
   border: 1px solid #0f172a;
 }
 .key.black .key-label { font-size: 10px; }
