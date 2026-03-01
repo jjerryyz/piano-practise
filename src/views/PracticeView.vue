@@ -18,7 +18,8 @@
       <div class="staff-area">
         <StaffNote
           v-if="practice.currentQuestion"
-          :note="practice.currentQuestion.targetNote"
+          :notes="practice.currentQuestion.targetNotes"
+          :active-index="practice.currentNoteIndex"
           :key-signature="0"
         />
       </div>

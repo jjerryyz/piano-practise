@@ -4,42 +4,33 @@ import type { NoteGroup } from '../data/noteRanges'
 
 export interface Question {
   id: number
-  targetNote: Note
-  /** Set of acceptable MIDI pitch classes (for enharmonic tolerance) */
-  acceptablePitchClasses: Set<number>
-  /** Timestamp when question was presented */
+  targetNotes: Note[]
   startTime: number
 }
 
 let questionCounter = 0
 
-export function generateQuestion(group: NoteGroup, excludeLastMidi?: number): Question {
-  let pool = group.notes
-  if (excludeLastMidi !== undefined && pool.length > 1) {
-    pool = pool.filter(n => n.midi !== excludeLastMidi)
+export function generateQuestion(group: NoteGroup, count: number, excludeLastMidi?: number): Question {
+  const notes: Note[] = []
+  let lastMidi = excludeLastMidi
+
+  for (let i = 0; i < count; i++) {
+    let pool = group.notes
+    if (lastMidi !== undefined && pool.length > 1) {
+      pool = pool.filter(n => n.midi !== lastMidi)
+    }
+    const picked = pool[Math.floor(Math.random() * pool.length)]
+    notes.push(picked)
+    lastMidi = picked.midi
   }
-  const targetNote = pool[Math.floor(Math.random() * pool.length)]
-  const acceptable = new Set([midiToPitchClass(targetNote.midi)])
 
   return {
     id: ++questionCounter,
-    targetNote,
-    acceptablePitchClasses: acceptable,
+    targetNotes: notes,
     startTime: Date.now(),
   }
 }
 
-export function generateQuestionSet(group: NoteGroup, count: number): Question[] {
-  const questions: Question[] = []
-  let lastMidi: number | undefined
-  for (let i = 0; i < count; i++) {
-    const q = generateQuestion(group, lastMidi)
-    questions.push(q)
-    lastMidi = q.targetNote.midi
-  }
-  return questions
-}
-
-export function evaluateAnswer(question: Question, answerMidi: number): boolean {
-  return question.acceptablePitchClasses.has(midiToPitchClass(answerMidi))
+export function evaluateNoteAnswer(note: Note, answerMidi: number): boolean {
+  return midiToPitchClass(note.midi) === midiToPitchClass(answerMidi)
 }

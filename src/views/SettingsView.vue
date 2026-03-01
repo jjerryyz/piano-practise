@@ -45,6 +45,19 @@
       </section>
 
       <section class="settings-group">
+        <h3 class="group-title">每题音符数</h3>
+        <div class="option-chips">
+          <button
+            v-for="n in notesPerOptions"
+            :key="n"
+            :class="['chip', { active: settings.notesPerQuestion === n }]"
+            @click="settings.notesPerQuestion = n"
+          >{{ n }}个</button>
+        </div>
+        <p class="hint">设为 1 即为单音练习，多个音符会依次显示在五线谱上</p>
+      </section>
+
+      <section class="settings-group">
         <h3 class="group-title">调号</h3>
         <div class="option-chips wrap">
           <button
@@ -67,6 +80,7 @@ import { KEY_SIGNATURES } from '../lib/musicTheory'
 const router = useRouter()
 const settings = useSettingsStore()
 
+const notesPerOptions = [1, 2, 3, 4, 5]
 const countOptions = [5, 7, 10, 15, 20]
 const timerOptions = [30, 60, 90, 120]
 const keySignatureOptions = KEY_SIGNATURES.filter(ks => Math.abs(ks.value) <= 4)
@@ -142,5 +156,12 @@ const keySignatureOptions = KEY_SIGNATURES.filter(ks => Math.abs(ks.value) <= 4)
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
+}
+
+.hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 </style>

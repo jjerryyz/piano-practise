@@ -9,6 +9,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const practiceMode = ref<PracticeMode>(loadStr('practiceMode', 'count') as PracticeMode)
   const keySignature = ref(loadNum('keySignature', 0))
   const includeAccidentals = ref(loadBool('includeAccidentals', false))
+  const notesPerQuestion = ref(loadNum('notesPerQuestion', 2))
 
   function loadNum(key: string, fallback: number): number {
     const v = localStorage.getItem(`settings.${key}`)
@@ -31,6 +32,7 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(practiceMode, v => persist('practiceMode', v))
   watch(keySignature, v => persist('keySignature', v))
   watch(includeAccidentals, v => persist('includeAccidentals', v))
+  watch(notesPerQuestion, v => persist('notesPerQuestion', v))
 
-  return { questionCount, timerSeconds, practiceMode, keySignature, includeAccidentals }
+  return { questionCount, timerSeconds, practiceMode, keySignature, includeAccidentals, notesPerQuestion }
 })

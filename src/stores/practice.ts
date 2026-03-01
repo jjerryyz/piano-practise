@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { NoteGroup } from '../data/noteRanges'
 import type { Question } from '../lib/questionGenerator'
-import { generateQuestion, evaluateAnswer } from '../lib/questionGenerator'
+import { generateQuestion, evaluateNoteAnswer } from '../lib/questionGenerator'
 import { useWrongBookStore } from './wrongBook'
 import { useSettingsStore } from './settings'
 import { noteDisplayName, type NoteLetter, type Accidental } from '../lib/musicTheory'
@@ -10,6 +10,7 @@ import { noteDisplayName, type NoteLetter, type Accidental } from '../lib/musicT
 export const usePracticeStore = defineStore('practice', () => {
   const currentGroup = ref<NoteGroup | null>(null)
   const currentQuestion = ref<Question | null>(null)
+  const currentNoteIndex = ref(0)
   const questionIndex = ref(0)
   const totalQuestions = ref(0)
   const correctCount = ref(0)
@@ -21,6 +22,7 @@ export const usePracticeStore = defineStore('practice', () => {
   const lastAnswerCorrect = ref<boolean | null>(null)
   const timerRemaining = ref(0)
   const isTimerMode = ref(false)
+  const notesPerQuestion = ref(1)
 
   let timerInterval: ReturnType<typeof setInterval> | null = null
   let startTimestamp = 0
@@ -34,6 +36,7 @@ export const usePracticeStore = defineStore('practice', () => {
     const settings = useSettingsStore()
     currentGroup.value = group
     questionIndex.value = 0
+    currentNoteIndex.value = 0
     correctCount.value = 0
     wrongCount.value = 0
     streak.value = 0
@@ -42,6 +45,7 @@ export const usePracticeStore = defineStore('practice', () => {
     isFinished.value = false
     lastAnswerCorrect.value = null
     startTimestamp = Date.now()
+    notesPerQuestion.value = settings.notesPerQuestion
 
     isTimerMode.value = settings.practiceMode === 'timer'
     totalQuestions.value = isTimerMode.value ? 999 : settings.questionCount
@@ -73,15 +77,19 @@ export const usePracticeStore = defineStore('practice', () => {
 
   function nextQuestion() {
     if (!currentGroup.value) return
-    const lastMidi = currentQuestion.value?.targetNote.midi
-    currentQuestion.value = generateQuestion(currentGroup.value, lastMidi)
+    const lastMidi = currentQuestion.value?.targetNotes.at(-1)?.midi
+    currentQuestion.value = generateQuestion(currentGroup.value, notesPerQuestion.value, lastMidi)
+    currentNoteIndex.value = 0
     questionIndex.value++
   }
 
   function submitAnswer(answerMidi: number) {
     if (!currentQuestion.value || !currentGroup.value || isFinished.value) return
 
-    const correct = evaluateAnswer(currentQuestion.value, answerMidi)
+    const targetNote = currentQuestion.value.targetNotes[currentNoteIndex.value]
+    if (!targetNote) return
+
+    const correct = evaluateNoteAnswer(targetNote, answerMidi)
     lastAnswerCorrect.value = correct
 
     if (correct) {
@@ -93,7 +101,6 @@ export const usePracticeStore = defineStore('practice', () => {
       streak.value = 0
 
       const wrongBook = useWrongBookStore()
-      const target = currentQuestion.value.targetNote
       const answerOctave = Math.floor(answerMidi / 12) - 1
       const answerPc = answerMidi % 12
       const letterNames: NoteLetter[] = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B']
@@ -101,10 +108,10 @@ export const usePracticeStore = defineStore('practice', () => {
 
       wrongBook.addRecord({
         targetNote: {
-          letter: target.letter,
-          octave: target.octave,
-          accidental: target.accidental,
-          displayName: target.displayName,
+          letter: targetNote.letter,
+          octave: targetNote.octave,
+          accidental: targetNote.accidental,
+          displayName: targetNote.displayName,
         },
         userAnswerMidi: answerMidi,
         userAnswerName: noteDisplayName(answerLetter, answerOctave, 'none' as Accidental),
@@ -113,14 +120,22 @@ export const usePracticeStore = defineStore('practice', () => {
       })
     }
 
-    if (!isTimerMode.value && questionIndex.value >= totalQuestions.value) {
-      finishPractice()
-    } else {
-      setTimeout(() => {
-        lastAnswerCorrect.value = null
-        nextQuestion()
-      }, 600)
-    }
+    const isLastNote = currentNoteIndex.value >= currentQuestion.value.targetNotes.length - 1
+    const isLastQuestion = !isTimerMode.value && questionIndex.value >= totalQuestions.value
+
+    setTimeout(() => {
+      lastAnswerCorrect.value = null
+
+      if (isLastNote) {
+        if (isLastQuestion) {
+          finishPractice()
+        } else {
+          nextQuestion()
+        }
+      } else {
+        currentNoteIndex.value++
+      }
+    }, 400)
   }
 
   function finishPractice() {
@@ -133,6 +148,7 @@ export const usePracticeStore = defineStore('practice', () => {
     stopTimer()
     currentGroup.value = null
     currentQuestion.value = null
+    currentNoteIndex.value = 0
     questionIndex.value = 0
     isFinished.value = false
     lastAnswerCorrect.value = null
@@ -141,6 +157,7 @@ export const usePracticeStore = defineStore('practice', () => {
   return {
     currentGroup,
     currentQuestion,
+    currentNoteIndex,
     questionIndex,
     totalQuestions,
     correctCount,
@@ -153,6 +170,7 @@ export const usePracticeStore = defineStore('practice', () => {
     lastAnswerCorrect,
     timerRemaining,
     isTimerMode,
+    notesPerQuestion,
     startPractice,
     submitAnswer,
     finishPractice,
