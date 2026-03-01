@@ -21,9 +21,10 @@
             v-for="wk in whiteKeys"
             :key="wk.midi"
             :class="['key white', { pressed: activePressedMidi === wk.midi }]"
-            @pointerdown.prevent="onKeyDown(wk.midi)"
-            @pointerup.prevent="onKeyUp"
-            @pointerleave="onKeyUp"
+            @pointerdown.prevent="onPointerDown($event, wk.midi)"
+            @pointermove.prevent="onPointerMove"
+            @pointerup.prevent="onPointerUp"
+            @pointerleave="onPointerCancel"
           >
             <span class="key-label">{{ wk.label }}</span>
           </div>
@@ -34,9 +35,10 @@
           :key="bk.midi"
           :class="['key black', { pressed: activePressedMidi === bk.midi }]"
           :style="{ left: `${bk.leftPx}px` }"
-          @pointerdown.prevent="onKeyDown(bk.midi)"
-          @pointerup.prevent="onKeyUp"
-          @pointerleave="onKeyUp"
+          @pointerdown.prevent="onPointerDown($event, bk.midi)"
+          @pointermove.prevent="onPointerMove"
+          @pointerup.prevent="onPointerUp"
+          @pointerleave="onPointerCancel"
         >
           <span class="key-label">{{ bk.label }}</span>
         </div>
@@ -141,13 +143,41 @@ function onScroll() {
   activeOctave.value = oct
 }
 
-function onKeyDown(midi: number) {
+const DRAG_THRESHOLD = 8
+let downX = 0
+let downY = 0
+let pendingMidi: number | null = null
+let dragged = false
+
+function onPointerDown(e: PointerEvent, midi: number) {
+  downX = e.clientX
+  downY = e.clientY
+  pendingMidi = midi
+  dragged = false
   pressedKey.value = midi
-  emit('notePress', midi)
 }
 
-function onKeyUp() {
+function onPointerMove(e: PointerEvent) {
+  if (pendingMidi === null) return
+  const dx = e.clientX - downX
+  const dy = e.clientY - downY
+  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+    dragged = true
+    pressedKey.value = null
+  }
+}
+
+function onPointerUp() {
+  if (pendingMidi !== null && !dragged) {
+    emit('notePress', pendingMidi)
+  }
   pressedKey.value = null
+  pendingMidi = null
+}
+
+function onPointerCancel() {
+  pressedKey.value = null
+  pendingMidi = null
 }
 
 watch(() => props.initialOctave, (v) => {
