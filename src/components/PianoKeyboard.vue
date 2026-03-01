@@ -18,7 +18,7 @@
       <div
         v-for="wk in whiteKeys"
         :key="wk.midi"
-        :class="['key white', { pressed: pressedKey === wk.midi }]"
+        :class="['key white', { pressed: activePressedMidi === wk.midi }]"
         @pointerdown.prevent="onKeyDown(wk.midi)"
         @pointerup.prevent="onKeyUp"
         @pointerleave="onKeyUp"
@@ -29,7 +29,7 @@
       <div
         v-for="bk in blackKeys"
         :key="bk.midi"
-        :class="['key black', { pressed: pressedKey === bk.midi }]"
+        :class="['key black', { pressed: activePressedMidi === bk.midi }]"
         :style="{ left: bk.left }"
         @pointerdown.prevent="onKeyDown(bk.midi)"
         @pointerup.prevent="onKeyUp"
@@ -52,11 +52,14 @@ const emit = defineEmits<{
 const props = defineProps<{
   /** Octave to select initially */
   initialOctave?: number
+  /** External pressed midi (e.g. from MIDI keyboard) */
+  activeMidi?: number | null
 }>()
 
 const ALL_OCTAVES = [2, 3, 4, 5, 6]
 const activeOctave = ref(props.initialOctave ?? 4)
 const pressedKey = ref<number | null>(null)
+const activePressedMidi = computed(() => pressedKey.value ?? props.activeMidi ?? null)
 
 watch(() => props.initialOctave, (v) => {
   if (v !== undefined) activeOctave.value = v

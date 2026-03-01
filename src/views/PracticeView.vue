@@ -28,6 +28,7 @@
       <div class="keyboard-area">
         <PianoKeyboard
           :initial-octave="initialOctave"
+          :active-midi="midiPressed"
           @note-press="onAnswer"
         />
       </div>
@@ -72,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePracticeStore } from '../stores/practice'
 import { groupPrimaryOctave } from '../data/noteRanges'
@@ -85,9 +86,16 @@ import MidiIndicator from '../components/MidiIndicator.vue'
 
 const router = useRouter()
 const practice = usePracticeStore()
+const midiPressed = ref<number | null>(null)
 
 const { status: midiStatus, deviceName: midiDevice } = useMidi({
-  onNoteOn(midi) { onAnswer(midi) },
+  onNoteOn(midi) {
+    midiPressed.value = midi
+    onAnswer(midi)
+  },
+  onNoteOff(midi) {
+    if (midiPressed.value === midi) midiPressed.value = null
+  },
 })
 
 const initialOctave = computed(() => {
