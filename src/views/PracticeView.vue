@@ -2,7 +2,7 @@
   <div class="page practice-page">
     <header class="page-header">
       <button class="back-btn" @click="goBack">&lt;</button>
-      <span class="title">{{ practice.currentGroup?.label ?? '练习' }}</span>
+      <span class="title">{{ practice.isWrongBookReview ? '错题复习' : practice.currentGroup?.label ?? '练习' }}</span>
       <MidiIndicator :status="midiStatus" :device-name="midiDevice" />
     </header>
 
@@ -108,12 +108,15 @@ function onAnswer(midi: number) {
 }
 
 function goBack() {
+  const target = practice.isWrongBookReview ? '/wrong-book' : '/'
   practice.reset()
-  router.push('/')
+  router.push(target)
 }
 
 function retry() {
-  if (practice.currentGroup) {
+  if (practice.isWrongBookReview) {
+    practice.startWrongBookReview()
+  } else if (practice.currentGroup) {
     practice.startPractice(practice.currentGroup)
   }
 }

@@ -23,6 +23,22 @@
         <svg class="mode-arrow" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
       </div>
 
+      <div class="mode-card note-name-card" @click="router.push('/note-name-practice')">
+        <div class="mode-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="#fff">
+            <path d="M5 4h14v3H5z" opacity=".35" />
+            <path d="M5 10h14v3H5z" opacity=".5" />
+            <path d="M5 16h14v3H5z" opacity=".35" />
+            <circle cx="10" cy="12" r="2.5" />
+          </svg>
+        </div>
+        <div class="mode-info">
+          <h2 class="mode-title">音名识别</h2>
+          <p class="mode-desc">看五线谱音符，从 CDEFGAB 中选择音名</p>
+        </div>
+        <svg class="mode-arrow" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
+      </div>
+
       <div class="mode-card rhythm-card" @click="router.push('/rhythm')">
         <div class="mode-icon">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="#fff">
@@ -106,6 +122,11 @@ const router = useRouter()
 .note-card {
   background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
   box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+}
+
+.note-name-card {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
 }
 
 .rhythm-card {

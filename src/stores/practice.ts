@@ -3,13 +3,16 @@ import { ref, computed } from 'vue'
 import type { NoteGroup } from '../data/noteRanges'
 import type { Question } from '../lib/questionGenerator'
 import { generateQuestion, evaluateNoteAnswer } from '../lib/questionGenerator'
-import { useWrongBookStore } from './wrongBook'
+import { useWrongBookStore, type WrongRecord } from './wrongBook'
 import { useSettingsStore } from './settings'
-import { noteDisplayName, type NoteLetter, type Accidental } from '../lib/musicTheory'
+import { createNote, noteDisplayName, type NoteLetter, type Accidental } from '../lib/musicTheory'
+
+type PracticeMode = 'normal' | 'wrong-review'
 
 export const usePracticeStore = defineStore('practice', () => {
   const currentGroup = ref<NoteGroup | null>(null)
   const currentQuestion = ref<Question | null>(null)
+  const currentReviewRecord = ref<WrongRecord | null>(null)
   const currentNoteIndex = ref(0)
   const questionIndex = ref(0)
   const totalQuestions = ref(0)
@@ -23,6 +26,8 @@ export const usePracticeStore = defineStore('practice', () => {
   const timerRemaining = ref(0)
   const isTimerMode = ref(false)
   const notesPerQuestion = ref(1)
+  const practiceMode = ref<PracticeMode>('normal')
+  const reviewQueue = ref<WrongRecord[]>([])
 
   let timerInterval: ReturnType<typeof setInterval> | null = null
   let startTimestamp = 0
@@ -32,8 +37,14 @@ export const usePracticeStore = defineStore('practice', () => {
     return total > 0 ? Math.round((correctCount.value / total) * 100) : 0
   })
 
+  const isWrongBookReview = computed(() => practiceMode.value === 'wrong-review')
+
   function startPractice(group: NoteGroup) {
     const settings = useSettingsStore()
+    stopTimer()
+    practiceMode.value = 'normal'
+    reviewQueue.value = []
+    currentReviewRecord.value = null
     currentGroup.value = group
     questionIndex.value = 0
     currentNoteIndex.value = 0
@@ -58,6 +69,43 @@ export const usePracticeStore = defineStore('practice', () => {
     nextQuestion()
   }
 
+  function startWrongBookReview(records?: WrongRecord[]) {
+    const wrongBook = useWrongBookStore()
+    const queue = [...(records ?? wrongBook.dueRecords)].sort((a, b) => a.dueAt - b.dueAt)
+    if (queue.length === 0) return false
+
+    stopTimer()
+    practiceMode.value = 'wrong-review'
+    reviewQueue.value = queue
+    currentReviewRecord.value = null
+    questionIndex.value = 0
+    currentNoteIndex.value = 0
+    correctCount.value = 0
+    wrongCount.value = 0
+    streak.value = 0
+    bestStreak.value = 0
+    elapsedMs.value = 0
+    isFinished.value = false
+    lastAnswerCorrect.value = null
+    isTimerMode.value = false
+    timerRemaining.value = 0
+    notesPerQuestion.value = 1
+    totalQuestions.value = queue.length
+    startTimestamp = Date.now()
+    currentGroup.value = {
+      id: 'wrong-review',
+      label: '错题复习',
+      sublabel: `到期错题 ${queue.length} 题`,
+      section: '错题本',
+      notes: queue.map(recordToNote),
+      difficulty: 'beginner',
+      includeAccidentals: true,
+    }
+
+    nextQuestion()
+    return true
+  }
+
   function startTimer() {
     stopTimer()
     timerInterval = setInterval(() => {
@@ -76,21 +124,41 @@ export const usePracticeStore = defineStore('practice', () => {
   }
 
   function nextQuestion() {
+    if (isWrongBookReview.value) {
+      const record = reviewQueue.value[questionIndex.value]
+      if (!record) {
+        finishPractice()
+        return
+      }
+
+      currentReviewRecord.value = record
+      currentQuestion.value = {
+        id: Date.now(),
+        targetNotes: [recordToNote(record)],
+        startTime: Date.now(),
+      }
+      currentNoteIndex.value = 0
+      questionIndex.value++
+      return
+    }
+
     if (!currentGroup.value) return
-    const lastMidi = currentQuestion.value?.targetNotes.at(-1)?.midi
+    const targetNotes = currentQuestion.value?.targetNotes
+    const lastMidi = targetNotes?.[targetNotes.length - 1]?.midi
     currentQuestion.value = generateQuestion(currentGroup.value, notesPerQuestion.value, lastMidi)
     currentNoteIndex.value = 0
     questionIndex.value++
   }
 
   function submitAnswer(answerMidi: number) {
-    if (!currentQuestion.value || !currentGroup.value || isFinished.value) return
+    if (!currentQuestion.value || !currentGroup.value || isFinished.value || lastAnswerCorrect.value !== null) return
 
     const targetNote = currentQuestion.value.targetNotes[currentNoteIndex.value]
     if (!targetNote) return
 
     const correct = evaluateNoteAnswer(targetNote, answerMidi)
     lastAnswerCorrect.value = correct
+    const answerName = answerNameFromMidi(answerMidi)
 
     if (correct) {
       correctCount.value++
@@ -99,12 +167,16 @@ export const usePracticeStore = defineStore('practice', () => {
     } else {
       wrongCount.value++
       streak.value = 0
+    }
 
+    if (isWrongBookReview.value && currentReviewRecord.value) {
       const wrongBook = useWrongBookStore()
-      const answerOctave = Math.floor(answerMidi / 12) - 1
-      const answerPc = answerMidi % 12
-      const letterNames: NoteLetter[] = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B']
-      const answerLetter = letterNames[answerPc]
+      wrongBook.recordReviewResult(currentReviewRecord.value.id, correct, {
+        midi: answerMidi,
+        name: answerName,
+      })
+    } else if (!correct) {
+      const wrongBook = useWrongBookStore()
 
       wrongBook.addRecord({
         targetNote: {
@@ -114,7 +186,7 @@ export const usePracticeStore = defineStore('practice', () => {
           displayName: targetNote.displayName,
         },
         userAnswerMidi: answerMidi,
-        userAnswerName: noteDisplayName(answerLetter, answerOctave, 'none' as Accidental),
+        userAnswerName: answerName,
         groupId: currentGroup.value.id,
         groupLabel: currentGroup.value.label,
       })
@@ -148,15 +220,35 @@ export const usePracticeStore = defineStore('practice', () => {
     stopTimer()
     currentGroup.value = null
     currentQuestion.value = null
+    currentReviewRecord.value = null
     currentNoteIndex.value = 0
     questionIndex.value = 0
+    practiceMode.value = 'normal'
+    reviewQueue.value = []
     isFinished.value = false
     lastAnswerCorrect.value = null
+  }
+
+  function recordToNote(record: WrongRecord) {
+    return createNote(
+      record.targetNote.letter as NoteLetter,
+      record.targetNote.octave,
+      record.targetNote.accidental as Accidental,
+    )
+  }
+
+  function answerNameFromMidi(answerMidi: number): string {
+    const answerOctave = Math.floor(answerMidi / 12) - 1
+    const answerPc = answerMidi % 12
+    const letterNames: NoteLetter[] = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B']
+    const answerLetter = letterNames[answerPc] ?? 'C'
+    return noteDisplayName(answerLetter, answerOctave, 'none')
   }
 
   return {
     currentGroup,
     currentQuestion,
+    currentReviewRecord,
     currentNoteIndex,
     questionIndex,
     totalQuestions,
@@ -171,7 +263,10 @@ export const usePracticeStore = defineStore('practice', () => {
     timerRemaining,
     isTimerMode,
     notesPerQuestion,
+    practiceMode,
+    isWrongBookReview,
     startPractice,
+    startWrongBookReview,
     submitAnswer,
     finishPractice,
     reset,

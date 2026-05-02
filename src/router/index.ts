@@ -19,6 +19,11 @@ const router = createRouter({
       component: () => import('../views/PracticeView.vue'),
     },
     {
+      path: '/note-name-practice',
+      name: 'noteNamePractice',
+      component: () => import('../views/NoteNamePracticeView.vue'),
+    },
+    {
       path: '/rhythm',
       name: 'rhythmHome',
       component: () => import('../views/RhythmHomeView.vue'),

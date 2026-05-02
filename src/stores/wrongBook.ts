@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 export interface WrongRecord {
   id: string
@@ -9,14 +9,58 @@ export interface WrongRecord {
   groupId: string
   groupLabel: string
   timestamp: number
+  practiceType: 'single-note'
+  reviewLevel: number
+  dueAt: number
+  lastReviewedAt: number | null
+  reviewCorrectCount: number
+  reviewWrongCount: number
 }
 
 const STORAGE_KEY = 'wrongBook'
+const REVIEW_INTERVALS = [
+  0,
+  10 * 60 * 1000,
+  24 * 60 * 60 * 1000,
+  3 * 24 * 60 * 60 * 1000,
+  7 * 24 * 60 * 60 * 1000,
+  15 * 24 * 60 * 60 * 1000,
+  30 * 24 * 60 * 60 * 1000,
+]
+
+function noteKey(record: Pick<WrongRecord, 'groupId' | 'targetNote'>): string {
+  const note = record.targetNote
+  return `${record.groupId}:${note.letter}:${note.octave}:${note.accidental}`
+}
+
+function normalizeRecord(record: Partial<WrongRecord>): WrongRecord | null {
+  if (!record.id || !record.targetNote || !record.groupId || !record.groupLabel) return null
+  const timestamp = record.timestamp ?? Date.now()
+  return {
+    id: record.id,
+    targetNote: record.targetNote,
+    userAnswerMidi: record.userAnswerMidi ?? 0,
+    userAnswerName: record.userAnswerName ?? '-',
+    groupId: record.groupId,
+    groupLabel: record.groupLabel,
+    timestamp,
+    practiceType: 'single-note',
+    reviewLevel: record.reviewLevel ?? 0,
+    dueAt: record.dueAt ?? timestamp,
+    lastReviewedAt: record.lastReviewedAt ?? null,
+    reviewCorrectCount: record.reviewCorrectCount ?? 0,
+    reviewWrongCount: record.reviewWrongCount ?? 0,
+  }
+}
 
 function loadRecords(): WrongRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    const parsed = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map(normalizeRecord)
+      .filter((record): record is WrongRecord => record !== null)
   } catch {
     return []
   }
@@ -29,12 +73,75 @@ export const useWrongBookStore = defineStore('wrongBook', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records.value))
   }
 
-  function addRecord(record: Omit<WrongRecord, 'id' | 'timestamp'>) {
-    records.value.push({
-      ...record,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      timestamp: Date.now(),
-    })
+  const dueRecords = computed(() => {
+    const now = Date.now()
+    return records.value
+      .filter(r => r.practiceType === 'single-note' && r.dueAt <= now)
+      .sort((a, b) => a.dueAt - b.dueAt)
+  })
+
+  const upcomingRecords = computed(() => {
+    const now = Date.now()
+    return records.value
+      .filter(r => r.practiceType === 'single-note' && r.dueAt > now)
+      .sort((a, b) => a.dueAt - b.dueAt)
+  })
+
+  const reviewStats = computed(() => ({
+    total: records.value.length,
+    due: dueRecords.value.length,
+    learning: records.value.filter(r => r.reviewLevel <= 1).length,
+    mastered: records.value.filter(r => r.reviewLevel >= REVIEW_INTERVALS.length - 1).length,
+  }))
+
+  function addRecord(record: Omit<WrongRecord, 'id' | 'timestamp' | 'practiceType' | 'reviewLevel' | 'dueAt' | 'lastReviewedAt' | 'reviewCorrectCount' | 'reviewWrongCount'>) {
+    const now = Date.now()
+    const existing = records.value.find(r => noteKey(r) === noteKey(record))
+    if (existing) {
+      existing.userAnswerMidi = record.userAnswerMidi
+      existing.userAnswerName = record.userAnswerName
+      existing.groupLabel = record.groupLabel
+      existing.timestamp = now
+      existing.reviewLevel = 0
+      existing.dueAt = now
+      existing.reviewWrongCount++
+    } else {
+      records.value.push({
+        ...record,
+        id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: now,
+        practiceType: 'single-note',
+        reviewLevel: 0,
+        dueAt: now,
+        lastReviewedAt: null,
+        reviewCorrectCount: 0,
+        reviewWrongCount: 1,
+      })
+    }
+    save()
+  }
+
+  function recordReviewResult(id: string, correct: boolean, answer?: { midi: number; name: string }) {
+    const record = records.value.find(r => r.id === id)
+    if (!record) return
+
+    const now = Date.now()
+    record.lastReviewedAt = now
+
+    if (answer) {
+      record.userAnswerMidi = answer.midi
+      record.userAnswerName = answer.name
+    }
+
+    if (correct) {
+      record.reviewCorrectCount++
+      record.reviewLevel = Math.min(record.reviewLevel + 1, REVIEW_INTERVALS.length - 1)
+    } else {
+      record.reviewWrongCount++
+      record.reviewLevel = 0
+    }
+
+    record.dueAt = now + (REVIEW_INTERVALS[record.reviewLevel] ?? 0)
     save()
   }
 
@@ -52,5 +159,15 @@ export const useWrongBookStore = defineStore('wrongBook', () => {
     return records.value.filter(r => r.groupId === groupId)
   }
 
-  return { records, addRecord, removeRecord, clearAll, getByGroup }
+  return {
+    records,
+    dueRecords,
+    upcomingRecords,
+    reviewStats,
+    addRecord,
+    recordReviewResult,
+    removeRecord,
+    clearAll,
+    getByGroup,
+  }
 })
