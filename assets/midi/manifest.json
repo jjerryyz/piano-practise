@@ -1,0 +1,20 @@
+[
+  {
+    "id": "twinkle",
+    "file": "twinkle.mid",
+    "title": "小星星",
+    "source": "Traditional / public domain",
+    "keySignature": 0,
+    "bpm": 100,
+    "timeSignature": [4, 4]
+  },
+  {
+    "id": "canon",
+    "file": "CANON.mid",
+    "title": "卡农",
+    "source": "Traditional / public domain",
+    "keySignature": 0,
+    "bpm": 90,
+    "timeSignature": [4, 4]
+  }
+]

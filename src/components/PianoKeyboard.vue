@@ -8,14 +8,17 @@
         @click="scrollToOctave(oct, true)"
       >
         <div class="mini-piano">
-          <span class="mini-w" v-for="i in 7" :key="i"></span>
+          <span class="mini-w" v-for="i in 7" :key="`m-${oct}-${i}`"></span>
         </div>
         <span class="oct-name">{{ octaveLabel(oct) }}</span>
       </div>
     </div>
 
     <div ref="scrollRef" class="keyboard-scroll" @scroll="onScroll">
-      <div class="keyboard-track" :style="{ width: `${whiteKeys.length * WHITE_KEY_WIDTH}px` }">
+      <div
+        class="keyboard-track"
+        :style="{ width: `${trackWidth}px`, marginLeft: `${trackOffset}px` }"
+      >
         <div class="white-row">
           <div
             v-for="wk in whiteKeys"
@@ -24,6 +27,7 @@
             @pointerdown.prevent="onPointerDown($event, wk.midi)"
             @pointermove.prevent="onPointerMove"
             @pointerup.prevent="onPointerUp"
+            @pointercancel.prevent="onPointerCancel"
             @pointerleave="onPointerCancel"
           >
             <span class="key-label">{{ wk.label }}</span>
@@ -38,6 +42,7 @@
           @pointerdown.prevent="onPointerDown($event, bk.midi)"
           @pointermove.prevent="onPointerMove"
           @pointerup.prevent="onPointerUp"
+          @pointercancel.prevent="onPointerCancel"
           @pointerleave="onPointerCancel"
         >
           <span class="key-label">{{ bk.label }}</span>
@@ -48,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { noteToMidi, noteDisplayName, type NoteLetter } from '../lib/musicTheory'
 
 const emit = defineEmits<{
@@ -62,13 +67,17 @@ const props = defineProps<{
   activeMidi?: number | null
 }>()
 
-const ALL_OCTAVES = [2, 3, 4, 5, 6]
+const ALL_OCTAVES = [2, 3, 4, 5, 6] as const
 const WHITE_KEY_WIDTH = 44
 const BLACK_KEY_WIDTH = 26
+const KEYS_PER_OCTAVE = 7
+
 const activeOctave = ref(props.initialOctave ?? 4)
 const pressedKey = ref<number | null>(null)
 const activePressedMidi = computed(() => pressedKey.value ?? props.activeMidi ?? null)
 const scrollRef = ref<HTMLDivElement>()
+/** Extra left inset used only when the full keyboard fits in the viewport. */
+const trackOffset = ref(0)
 
 interface WhiteKey { midi: number; label: string }
 interface BlackKey { midi: number; label: string; leftPx: number }
@@ -96,7 +105,8 @@ const whiteKeys = computed<WhiteKey[]>(() => {
     for (const l of WHITE_LETTERS) {
       result.push({
         midi: noteToMidi(l, oct, 'none'),
-        label: l === 'C' ? noteDisplayName(l, oct, 'none') : '',
+        // Match the octave-strip labels so C / c / c¹ line up visually.
+        label: l === 'C' ? octaveLabel(oct) : '',
       })
     }
   }
@@ -107,8 +117,9 @@ const blackKeys = computed<BlackKey[]>(() => {
   const result: BlackKey[] = []
   for (let octIdx = 0; octIdx < ALL_OCTAVES.length; octIdx++) {
     const oct = ALL_OCTAVES[octIdx]
+    if (oct === undefined) continue
     for (const def of BLACK_DEFS) {
-      const globalWhiteIdx = octIdx * 7 + def.whiteIndex
+      const globalWhiteIdx = octIdx * KEYS_PER_OCTAVE + def.whiteIndex
       const boundaryX = (globalWhiteIdx + 1) * WHITE_KEY_WIDTH
       result.push({
         midi: noteToMidi(def.letter, oct, 'sharp'),
@@ -120,8 +131,24 @@ const blackKeys = computed<BlackKey[]>(() => {
   return result
 })
 
+const trackWidth = computed(() => whiteKeys.value.length * WHITE_KEY_WIDTH)
+
 function clampOctave(oct: number): number {
-  return Math.min(ALL_OCTAVES[ALL_OCTAVES.length - 1], Math.max(ALL_OCTAVES[0], oct))
+  const first = ALL_OCTAVES[0] ?? 2
+  const last = ALL_OCTAVES[ALL_OCTAVES.length - 1] ?? 6
+  return Math.min(last, Math.max(first, oct))
+}
+
+function updateTrackOffset() {
+  const scroller = scrollRef.value
+  if (!scroller) return
+  const extra = scroller.clientWidth - trackWidth.value
+  trackOffset.value = extra > 0 ? Math.floor(extra / 2) : 0
+}
+
+function octaveStartLeft(oct: number): number {
+  const base = ALL_OCTAVES[0] ?? 2
+  return (clampOctave(oct) - base) * KEYS_PER_OCTAVE * WHITE_KEY_WIDTH
 }
 
 function scrollToOctave(oct: number, smooth = false) {
@@ -129,18 +156,27 @@ function scrollToOctave(oct: number, smooth = false) {
   activeOctave.value = target
   const scroller = scrollRef.value
   if (!scroller) return
-  const startWhiteIdx = (target - ALL_OCTAVES[0]) * 7
-  const left = startWhiteIdx * WHITE_KEY_WIDTH
-  scroller.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' })
+  updateTrackOffset()
+  // When the full keyboard fits, centering already shows every octave.
+  if (trackOffset.value > 0) return
+  scroller.scrollTo({
+    left: octaveStartLeft(target),
+    behavior: smooth ? 'smooth' : 'auto',
+  })
+}
+
+function syncActiveFromScroll() {
+  const scroller = scrollRef.value
+  if (!scroller || trackOffset.value > 0) return
+  // Use the left edge of the viewport so the highlighted octave matches
+  // the C-label that just entered from the left (and strip clicks).
+  const leftIdx = Math.max(0, Math.floor((scroller.scrollLeft + 2) / WHITE_KEY_WIDTH))
+  const base = ALL_OCTAVES[0] ?? 2
+  activeOctave.value = clampOctave(base + Math.floor(leftIdx / KEYS_PER_OCTAVE))
 }
 
 function onScroll() {
-  const scroller = scrollRef.value
-  if (!scroller) return
-  const centerX = scroller.scrollLeft + scroller.clientWidth / 2
-  const whiteIdx = Math.floor(centerX / WHITE_KEY_WIDTH)
-  const oct = clampOctave(ALL_OCTAVES[0] + Math.floor(whiteIdx / 7))
-  activeOctave.value = oct
+  syncActiveFromScroll()
 }
 
 const DRAG_THRESHOLD = 8
@@ -173,21 +209,42 @@ function onPointerUp() {
   }
   pressedKey.value = null
   pendingMidi = null
+  dragged = false
 }
 
 function onPointerCancel() {
   pressedKey.value = null
   pendingMidi = null
+  dragged = false
 }
 
 watch(() => props.initialOctave, (v) => {
-  if (v !== undefined) scrollToOctave(v)
+  if (v !== undefined) {
+    nextTick(() => scrollToOctave(v))
+  }
 })
+
+let resizeObserver: ResizeObserver | null = null
 
 onMounted(() => {
   nextTick(() => {
+    updateTrackOffset()
     scrollToOctave(props.initialOctave ?? 4)
   })
+
+  const scroller = scrollRef.value
+  if (scroller && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      updateTrackOffset()
+      scrollToOctave(activeOctave.value)
+    })
+    resizeObserver.observe(scroller)
+  }
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
 })
 </script>
 
@@ -211,13 +268,13 @@ onMounted(() => {
 .octave-strip::-webkit-scrollbar { display: none; }
 
 .oct-cell {
-  flex: 1 0 0;
-  min-width: 52px;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 5px 4px 4px;
+  padding: 5px 2px 4px;
   border-radius: 8px;
   border: 1.5px solid var(--border);
   background: var(--bg);
@@ -237,7 +294,7 @@ onMounted(() => {
   height: 10px;
 }
 .mini-w {
-  width: 5px;
+  width: 4px;
   background: #cbd5e1;
   border-radius: 1px;
 }
@@ -247,30 +304,36 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-secondary);
   line-height: 1;
+  white-space: nowrap;
 }
 
 /* ---- full keyboard ---- */
 .keyboard-scroll {
-  display: flex;
-  justify-content: center;
+  /* Left-aligned scroll container: avoid flex centering, which breaks
+     scrollLeft math and black-key alignment on varying phone widths. */
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x;
   padding-bottom: 2px;
+  width: 100%;
 }
 
 .keyboard-track {
   position: relative;
   height: 130px;
   flex: 0 0 auto;
+  /* Prevent subpixel layout from shrinking keys on narrow screens */
+  min-width: max-content;
 }
 
 .white-row {
   display: flex;
+  flex-wrap: nowrap;
   height: 100%;
   position: relative;
   z-index: 1;
+  width: max-content;
 }
 
 .key {
@@ -285,11 +348,13 @@ onMounted(() => {
 
 .key.white {
   position: relative;
+  box-sizing: border-box;
   width: 44px;
   min-width: 44px;
+  max-width: 44px;
+  flex: 0 0 44px;
   background: #fff;
   border: 1px solid #d1d5db;
-  box-sizing: border-box;
   z-index: 1;
 }
 .key.white.pressed { background: #e0e7ff; }
@@ -297,19 +362,27 @@ onMounted(() => {
 .key.black {
   position: absolute;
   top: 0;
+  box-sizing: border-box;
   width: 26px;
   height: 55%;
   background: #1e293b;
   color: #fff;
   z-index: 5;
   border: 1px solid #0f172a;
+  /* Black keys are labels for accidentals; keep text readable but light */
+  padding-bottom: 4px;
 }
-.key.black .key-label { font-size: 10px; }
+.key.black .key-label {
+  font-size: 9px;
+  opacity: 0.85;
+  white-space: nowrap;
+}
 .key.black.pressed { background: #475569; }
 
 .key-label {
   font-size: 12px;
   font-weight: 500;
   pointer-events: none;
+  line-height: 1.1;
 }
 </style>

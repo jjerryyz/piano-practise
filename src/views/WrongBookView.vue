@@ -82,7 +82,7 @@
           </div>
         </div>
         <div class="record-meta">
-          <span>{{ record.groupLabel }}</span>
+          <span>{{ practiceTypeLabel(record.practiceType) }} · {{ record.groupLabel }}</span>
           <span>错 {{ record.reviewWrongCount }} 次 / 对 {{ record.reviewCorrectCount }} 次</span>
           <span>{{ formatTime(record.timestamp) }}</span>
         </div>
@@ -96,7 +96,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePracticeStore } from '../stores/practice'
-import { useWrongBookStore } from '../stores/wrongBook'
+import { useWrongBookStore, type PracticeType } from '../stores/wrongBook'
 
 const router = useRouter()
 const wrongBook = useWrongBookStore()
@@ -132,11 +132,15 @@ const filteredRecords = computed(() => {
 })
 
 const emptyText = computed(() => {
-  if (wrongBook.records.length === 0) return '暂无单音练习错题'
+  if (wrongBook.records.length === 0) return '暂无错题'
   if (selectedStatus.value === 'due') return '当前没有到期错题'
   if (selectedStatus.value === 'upcoming') return '暂无未到期错题'
   return '暂无错题记录'
 })
+
+function practiceTypeLabel(type: PracticeType): string {
+  return type === 'melody-section' ? '旋律章节' : '单音练习'
+}
 
 function formatTime(ts: number): string {
   const d = new Date(ts)

@@ -2,12 +2,18 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { NoteGroup } from '../data/noteRanges'
 import type { Question } from '../lib/questionGenerator'
-import { generateQuestion, evaluateNoteAnswer } from '../lib/questionGenerator'
-import { useWrongBookStore, type WrongRecord } from './wrongBook'
+import {
+  generateQuestion,
+  generateMelodySectionQuestion,
+  evaluateNoteAnswer,
+  evaluateMelodyAnswer,
+} from '../lib/questionGenerator'
+import { useWrongBookStore, type WrongRecord, type PracticeType } from './wrongBook'
 import { useSettingsStore } from './settings'
-import { createNote, noteDisplayName, type NoteLetter, type Accidental } from '../lib/musicTheory'
+import { createNote, type NoteLetter, type Accidental } from '../lib/musicTheory'
+import { DEFAULT_BARS_PER_SECTION, midiToNote } from '../data/melodies'
 
-type PracticeMode = 'normal' | 'wrong-review'
+type PracticeMode = 'normal' | 'wrong-review' | 'melody'
 
 export const usePracticeStore = defineStore('practice', () => {
   const currentGroup = ref<NoteGroup | null>(null)
@@ -28,6 +34,7 @@ export const usePracticeStore = defineStore('practice', () => {
   const notesPerQuestion = ref(1)
   const practiceMode = ref<PracticeMode>('normal')
   const reviewQueue = ref<WrongRecord[]>([])
+  const barsPerSection = ref(DEFAULT_BARS_PER_SECTION)
 
   let timerInterval: ReturnType<typeof setInterval> | null = null
   let startTimestamp = 0
@@ -38,6 +45,13 @@ export const usePracticeStore = defineStore('practice', () => {
   })
 
   const isWrongBookReview = computed(() => practiceMode.value === 'wrong-review')
+  const isMelodyPractice = computed(() => practiceMode.value === 'melody')
+
+  const sectionLabel = computed(() => {
+    const meta = currentQuestion.value?.melody
+    if (!meta) return ''
+    return `${meta.title} · 第 ${meta.startBar + 1}-${meta.endBar + 1} 小节`
+  })
 
   function startPractice(group: NoteGroup) {
     const settings = useSettingsStore()
@@ -60,6 +74,44 @@ export const usePracticeStore = defineStore('practice', () => {
 
     isTimerMode.value = settings.practiceMode === 'timer'
     totalQuestions.value = isTimerMode.value ? 999 : settings.questionCount
+
+    if (isTimerMode.value) {
+      timerRemaining.value = settings.timerSeconds
+      startTimer()
+    }
+
+    nextQuestion()
+  }
+
+  function startMelodyPractice(sectionBars = DEFAULT_BARS_PER_SECTION) {
+    const settings = useSettingsStore()
+    stopTimer()
+    practiceMode.value = 'melody'
+    reviewQueue.value = []
+    currentReviewRecord.value = null
+    barsPerSection.value = sectionBars
+    questionIndex.value = 0
+    currentNoteIndex.value = 0
+    correctCount.value = 0
+    wrongCount.value = 0
+    streak.value = 0
+    bestStreak.value = 0
+    elapsedMs.value = 0
+    isFinished.value = false
+    lastAnswerCorrect.value = null
+    startTimestamp = Date.now()
+    notesPerQuestion.value = 0
+    isTimerMode.value = settings.practiceMode === 'timer'
+    totalQuestions.value = isTimerMode.value ? 999 : settings.questionCount
+    currentGroup.value = {
+      id: 'melody-section',
+      label: '旋律章节',
+      sublabel: `每次 ${sectionBars} 小节`,
+      section: '旋律练习',
+      notes: [],
+      difficulty: 'beginner',
+      includeAccidentals: true,
+    }
 
     if (isTimerMode.value) {
       timerRemaining.value = settings.timerSeconds
@@ -142,6 +194,18 @@ export const usePracticeStore = defineStore('practice', () => {
       return
     }
 
+    if (isMelodyPractice.value) {
+      const prev = currentQuestion.value?.melody
+      currentQuestion.value = generateMelodySectionQuestion(barsPerSection.value, {
+        exclude: prev
+          ? { melodyId: prev.melodyId, startBar: prev.startBar }
+          : undefined,
+      })
+      currentNoteIndex.value = 0
+      questionIndex.value++
+      return
+    }
+
     if (!currentGroup.value) return
     const targetNotes = currentQuestion.value?.targetNotes
     const lastMidi = targetNotes?.[targetNotes.length - 1]?.midi
@@ -156,7 +220,9 @@ export const usePracticeStore = defineStore('practice', () => {
     const targetNote = currentQuestion.value.targetNotes[currentNoteIndex.value]
     if (!targetNote) return
 
-    const correct = evaluateNoteAnswer(targetNote, answerMidi)
+    const correct = isMelodyPractice.value
+      ? evaluateMelodyAnswer(targetNote, answerMidi)
+      : evaluateNoteAnswer(targetNote, answerMidi)
     lastAnswerCorrect.value = correct
     const answerName = answerNameFromMidi(answerMidi)
 
@@ -177,6 +243,10 @@ export const usePracticeStore = defineStore('practice', () => {
       })
     } else if (!correct) {
       const wrongBook = useWrongBookStore()
+      const practiceType: PracticeType = isMelodyPractice.value ? 'melody-section' : 'single-note'
+      const groupLabel = isMelodyPractice.value && currentQuestion.value.melody
+        ? sectionLabel.value
+        : currentGroup.value.label
 
       wrongBook.addRecord({
         targetNote: {
@@ -188,7 +258,8 @@ export const usePracticeStore = defineStore('practice', () => {
         userAnswerMidi: answerMidi,
         userAnswerName: answerName,
         groupId: currentGroup.value.id,
-        groupLabel: currentGroup.value.label,
+        groupLabel,
+        practiceType,
       })
     }
 
@@ -225,6 +296,7 @@ export const usePracticeStore = defineStore('practice', () => {
     questionIndex.value = 0
     practiceMode.value = 'normal'
     reviewQueue.value = []
+    barsPerSection.value = DEFAULT_BARS_PER_SECTION
     isFinished.value = false
     lastAnswerCorrect.value = null
   }
@@ -238,11 +310,7 @@ export const usePracticeStore = defineStore('practice', () => {
   }
 
   function answerNameFromMidi(answerMidi: number): string {
-    const answerOctave = Math.floor(answerMidi / 12) - 1
-    const answerPc = answerMidi % 12
-    const letterNames: NoteLetter[] = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B']
-    const answerLetter = letterNames[answerPc] ?? 'C'
-    return noteDisplayName(answerLetter, answerOctave, 'none')
+    return midiToNote(answerMidi).displayName
   }
 
   return {
@@ -264,8 +332,12 @@ export const usePracticeStore = defineStore('practice', () => {
     isTimerMode,
     notesPerQuestion,
     practiceMode,
+    barsPerSection,
     isWrongBookReview,
+    isMelodyPractice,
+    sectionLabel,
     startPractice,
+    startMelodyPractice,
     startWrongBookReview,
     submitAnswer,
     finishPractice,

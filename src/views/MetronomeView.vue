@@ -179,7 +179,10 @@ function tapTempo() {
   if (tapTimes.length >= 2) {
     const intervals: number[] = []
     for (let i = 1; i < tapTimes.length; i++) {
-      const d = tapTimes[i] - tapTimes[i - 1]
+      const curr = tapTimes[i]
+      const prev = tapTimes[i - 1]
+      if (curr === undefined || prev === undefined) continue
+      const d = curr - prev
       if (d > 2000) { tapTimes.length = 0; tapTimes.push(now); return }
       intervals.push(d)
     }

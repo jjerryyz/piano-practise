@@ -174,7 +174,7 @@ const playheadPercent = computed(() => {
 const beatMarkers = computed(() => {
   if (rhythm.totalDuration <= 0) return []
   return rhythm.flatBeats.map((b, i) => ({
-    percent: (rhythm.expectedTimes[i] / rhythm.totalDuration) * 100,
+    percent: ((rhythm.expectedTimes[i] ?? 0) / rhythm.totalDuration) * 100,
     isRest: b.isRest,
   }))
 })

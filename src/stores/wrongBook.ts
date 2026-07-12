@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
+export type PracticeType = 'single-note' | 'melody-section'
+
 export interface WrongRecord {
   id: string
   targetNote: { letter: string; octave: number; accidental: string; displayName: string }
@@ -9,7 +11,7 @@ export interface WrongRecord {
   groupId: string
   groupLabel: string
   timestamp: number
-  practiceType: 'single-note'
+  practiceType: PracticeType
   reviewLevel: number
   dueAt: number
   lastReviewedAt: number | null
@@ -28,9 +30,13 @@ const REVIEW_INTERVALS = [
   30 * 24 * 60 * 60 * 1000,
 ]
 
-function noteKey(record: Pick<WrongRecord, 'groupId' | 'targetNote'>): string {
+function noteKey(record: Pick<WrongRecord, 'groupId' | 'targetNote' | 'practiceType'>): string {
   const note = record.targetNote
-  return `${record.groupId}:${note.letter}:${note.octave}:${note.accidental}`
+  return `${record.practiceType}:${record.groupId}:${note.letter}:${note.octave}:${note.accidental}`
+}
+
+function normalizePracticeType(value: unknown): PracticeType {
+  return value === 'melody-section' ? 'melody-section' : 'single-note'
 }
 
 function normalizeRecord(record: Partial<WrongRecord>): WrongRecord | null {
@@ -44,7 +50,7 @@ function normalizeRecord(record: Partial<WrongRecord>): WrongRecord | null {
     groupId: record.groupId,
     groupLabel: record.groupLabel,
     timestamp,
-    practiceType: 'single-note',
+    practiceType: normalizePracticeType(record.practiceType),
     reviewLevel: record.reviewLevel ?? 0,
     dueAt: record.dueAt ?? timestamp,
     lastReviewedAt: record.lastReviewedAt ?? null,
@@ -76,14 +82,14 @@ export const useWrongBookStore = defineStore('wrongBook', () => {
   const dueRecords = computed(() => {
     const now = Date.now()
     return records.value
-      .filter(r => r.practiceType === 'single-note' && r.dueAt <= now)
+      .filter(r => r.dueAt <= now)
       .sort((a, b) => a.dueAt - b.dueAt)
   })
 
   const upcomingRecords = computed(() => {
     const now = Date.now()
     return records.value
-      .filter(r => r.practiceType === 'single-note' && r.dueAt > now)
+      .filter(r => r.dueAt > now)
       .sort((a, b) => a.dueAt - b.dueAt)
   })
 
@@ -94,14 +100,17 @@ export const useWrongBookStore = defineStore('wrongBook', () => {
     mastered: records.value.filter(r => r.reviewLevel >= REVIEW_INTERVALS.length - 1).length,
   }))
 
-  function addRecord(record: Omit<WrongRecord, 'id' | 'timestamp' | 'practiceType' | 'reviewLevel' | 'dueAt' | 'lastReviewedAt' | 'reviewCorrectCount' | 'reviewWrongCount'>) {
+  function addRecord(record: Omit<WrongRecord, 'id' | 'timestamp' | 'reviewLevel' | 'dueAt' | 'lastReviewedAt' | 'reviewCorrectCount' | 'reviewWrongCount'> & { practiceType?: PracticeType }) {
     const now = Date.now()
-    const existing = records.value.find(r => noteKey(r) === noteKey(record))
+    const practiceType = record.practiceType ?? 'single-note'
+    const payload = { ...record, practiceType }
+    const existing = records.value.find(r => noteKey(r) === noteKey(payload))
     if (existing) {
       existing.userAnswerMidi = record.userAnswerMidi
       existing.userAnswerName = record.userAnswerName
       existing.groupLabel = record.groupLabel
       existing.timestamp = now
+      existing.practiceType = practiceType
       existing.reviewLevel = 0
       existing.dueAt = now
       existing.reviewWrongCount++
@@ -110,7 +119,7 @@ export const useWrongBookStore = defineStore('wrongBook', () => {
         ...record,
         id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
         timestamp: now,
-        practiceType: 'single-note',
+        practiceType,
         reviewLevel: 0,
         dueAt: now,
         lastReviewedAt: null,

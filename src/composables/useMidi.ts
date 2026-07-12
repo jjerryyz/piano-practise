@@ -18,9 +18,9 @@ export function useMidi(callbacks: MidiCallbacks = {}) {
     const data = msg.data
     if (!data || data.length < 3) return
 
-    const cmd = data[0] & 0xf0
-    const note = data[1]
-    const velocity = data[2]
+    const cmd = data[0]! & 0xf0
+    const note = data[1]!
+    const velocity = data[2]!
 
     if (cmd === 0x90 && velocity > 0) {
       callbacks.onNoteOn?.(note, velocity)

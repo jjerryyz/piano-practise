@@ -39,6 +39,24 @@
         <svg class="mode-arrow" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
       </div>
 
+      <div class="mode-card melody-card" @click="router.push('/melody')">
+        <div class="mode-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="#fff">
+            <path d="M4 19h16v2H4z" opacity=".35" />
+            <path d="M7 8l3 2 4-5 3 4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="7" cy="8" r="1.6" />
+            <circle cx="10" cy="10" r="1.6" />
+            <circle cx="14" cy="5" r="1.6" />
+            <circle cx="17" cy="9" r="1.6" />
+          </svg>
+        </div>
+        <div class="mode-info">
+          <h2 class="mode-title">旋律章节</h2>
+          <p class="mode-desc">随机抽取连续小节，按原旋律顺序逐音练习</p>
+        </div>
+        <svg class="mode-arrow" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
+      </div>
+
       <div class="mode-card rhythm-card" @click="router.push('/rhythm')">
         <div class="mode-icon">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="#fff">
@@ -127,6 +145,11 @@ const router = useRouter()
 .note-name-card {
   background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
   box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+}
+
+.melody-card {
+  background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.35);
 }
 
 .rhythm-card {

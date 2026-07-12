@@ -57,7 +57,7 @@ function render() {
     return sn
   })
 
-  const voice = new Voice({ num_beats: totalBeats, beat_value: props.timeSignature[1] })
+  const voice = new Voice({ numBeats: totalBeats, beatValue: props.timeSignature[1] })
   voice.setStrict(false)
   for (const sn of staveNotes) voice.addTickable(sn)
 

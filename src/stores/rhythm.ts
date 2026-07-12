@@ -162,8 +162,11 @@ export const useRhythmStore = defineStore('rhythm', () => {
     let bestIdx = -1
     let bestDist = Infinity
     for (let i = currentBeatIndex.value; i < flatBeats.value.length; i++) {
-      if (flatBeats.value[i].isRest) continue
-      const dist = Math.abs(now - expectedTimes.value[i])
+      const beat = flatBeats.value[i]
+      const expectedAt = expectedTimes.value[i]
+      if (!beat || expectedAt === undefined) continue
+      if (beat.isRest) continue
+      const dist = Math.abs(now - expectedAt)
       if (dist < bestDist) {
         bestIdx = i
         bestDist = dist
@@ -177,10 +180,12 @@ export const useRhythmStore = defineStore('rhythm', () => {
     // Mark every beat before bestIdx as skipped
     while (currentBeatIndex.value < bestIdx) {
       const b = flatBeats.value[currentBeatIndex.value]
+      const expectedAt = expectedTimes.value[currentBeatIndex.value]
+      if (!b || expectedAt === undefined) break
       tapResults.value.push({
-        expectedTime: expectedTimes.value[currentBeatIndex.value],
+        expectedTime: expectedAt,
         actualTime: now,
-        diffMs: now - expectedTimes.value[currentBeatIndex.value],
+        diffMs: now - expectedAt,
         rating: b.isRest ? 'perfect' : 'miss',
         isRest: b.isRest,
       })
@@ -189,6 +194,7 @@ export const useRhythmStore = defineStore('rhythm', () => {
 
     // Match this tap to the closest beat
     const expected = expectedTimes.value[currentBeatIndex.value]
+    if (expected === undefined) return
     const diff = now - expected
     tapResults.value.push({
       expectedTime: expected,
@@ -207,11 +213,11 @@ export const useRhythmStore = defineStore('rhythm', () => {
   }
 
   function advancePastRests(now: number) {
-    while (
-      currentBeatIndex.value < flatBeats.value.length &&
-      flatBeats.value[currentBeatIndex.value].isRest
-    ) {
+    while (currentBeatIndex.value < flatBeats.value.length) {
+      const beat = flatBeats.value[currentBeatIndex.value]
+      if (!beat?.isRest) break
       const expected = expectedTimes.value[currentBeatIndex.value]
+      if (expected === undefined) break
       tapResults.value.push({
         expectedTime: expected,
         actualTime: now,

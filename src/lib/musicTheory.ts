@@ -99,12 +99,11 @@ export function enharmonicSpellings(midi: number): Note[] {
   for (const letter of ALL_LETTERS) {
     const base = LETTER_TO_SEMITONE[letter]
     if (base === pc) results.push(createNote(letter, octave, 'none'))
-    if (base + 1 === pc || (base === 11 && pc === 0)) {
-      const oct = base === 11 && pc === 0 ? octave + 1 : octave
-      if (base + 1 === pc) results.push(createNote(letter, octave, 'sharp'))
+    if (base + 1 === pc) {
+      results.push(createNote(letter, octave, 'sharp'))
     }
-    if (base - 1 === pc || (base === 0 && pc === 11)) {
-      if (base - 1 === pc) results.push(createNote(letter, octave, 'flat'))
+    if (base - 1 === pc) {
+      results.push(createNote(letter, octave, 'flat'))
     }
   }
   return results
@@ -144,9 +143,15 @@ const FLAT_ORDER: NoteLetter[] = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
 export function keySignatureAccidentals(ks: number): Map<NoteLetter, 'sharp' | 'flat'> {
   const map = new Map<NoteLetter, 'sharp' | 'flat'>()
   if (ks > 0) {
-    for (let i = 0; i < Math.min(ks, 7); i++) map.set(SHARP_ORDER[i], 'sharp')
+    for (let i = 0; i < Math.min(ks, 7); i++) {
+      const letter = SHARP_ORDER[i]
+      if (letter) map.set(letter, 'sharp')
+    }
   } else if (ks < 0) {
-    for (let i = 0; i < Math.min(-ks, 7); i++) map.set(FLAT_ORDER[i], 'flat')
+    for (let i = 0; i < Math.min(-ks, 7); i++) {
+      const letter = FLAT_ORDER[i]
+      if (letter) map.set(letter, 'flat')
+    }
   }
   return map
 }

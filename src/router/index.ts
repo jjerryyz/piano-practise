@@ -19,6 +19,16 @@ const router = createRouter({
       component: () => import('../views/PracticeView.vue'),
     },
     {
+      path: '/melody',
+      name: 'melodyHome',
+      component: () => import('../views/MelodyHomeView.vue'),
+    },
+    {
+      path: '/melody/practice',
+      name: 'melodyPractice',
+      component: () => import('../views/PracticeView.vue'),
+    },
+    {
       path: '/note-name-practice',
       name: 'noteNamePractice',
       component: () => import('../views/NoteNamePracticeView.vue'),

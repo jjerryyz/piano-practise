@@ -2,7 +2,7 @@
   <div class="page practice-page">
     <header class="page-header">
       <button class="back-btn" @click="goBack">&lt;</button>
-      <span class="title">{{ practice.isWrongBookReview ? '错题复习' : practice.currentGroup?.label ?? '练习' }}</span>
+      <span class="title">{{ headerTitle }}</span>
       <MidiIndicator :status="midiStatus" :device-name="midiDevice" />
     </header>
 
@@ -16,12 +16,18 @@
         :timer-remaining="practice.timerRemaining"
       />
 
+      <p v-if="practice.isMelodyPractice && practice.sectionLabel" class="section-hint">
+        {{ practice.sectionLabel }}
+      </p>
+
       <div class="staff-area">
         <StaffNote
           v-if="practice.currentQuestion"
           :notes="practice.currentQuestion.targetNotes"
           :active-index="practice.currentNoteIndex"
-          :key-signature="0"
+          :key-signature="practice.currentQuestion.melody?.keySignature ?? 0"
+          :layout-notes="practice.currentQuestion.melody?.layoutNotes"
+          :time-signature="practice.currentQuestion.melody?.timeSignature"
         />
       </div>
 
@@ -29,7 +35,7 @@
         <PianoKeyboard
           :initial-octave="initialOctave"
           :active-midi="midiPressed"
-          @note-press="onAnswer"
+          @note-press="onScreenTap"
         />
       </div>
 
@@ -73,11 +79,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePracticeStore } from '../stores/practice'
-import { groupPrimaryOctave } from '../data/noteRanges'
 import { useMidi } from '../composables/useMidi'
+import { usePianoSound } from '../composables/usePianoSound'
 import StaffNote from '../components/StaffNote.vue'
 import PianoKeyboard from '../components/PianoKeyboard.vue'
 import ScoreBoard from '../components/ScoreBoard.vue'
@@ -87,28 +93,50 @@ import MidiIndicator from '../components/MidiIndicator.vue'
 const router = useRouter()
 const practice = usePracticeStore()
 const midiPressed = ref<number | null>(null)
+const { noteOn, noteOff, playTap } = usePianoSound()
+
+onMounted(() => {
+  if (!practice.currentQuestion && !practice.isFinished) {
+    router.replace(practice.isMelodyPractice ? '/melody' : '/')
+  }
+})
 
 const { status: midiStatus, deviceName: midiDevice } = useMidi({
-  onNoteOn(midi) {
+  onNoteOn(midi, velocity) {
     midiPressed.value = midi
+    void noteOn(midi, velocity / 127)
     onAnswer(midi)
   },
   onNoteOff(midi) {
+    noteOff(midi)
     if (midiPressed.value === midi) midiPressed.value = null
   },
 })
 
-const initialOctave = computed(() => {
-  if (!practice.currentGroup) return 4
-  return groupPrimaryOctave(practice.currentGroup)
+const headerTitle = computed(() => {
+  if (practice.isWrongBookReview) return '错题复习'
+  if (practice.isMelodyPractice) return '旋律章节'
+  return practice.currentGroup?.label ?? '练习'
 })
+
+// c¹ (MIDI octave 4) is the keyboard's stable starting position.
+const initialOctave = 4
+
+function onScreenTap(midi: number) {
+  void playTap(midi, 0.85)
+  onAnswer(midi)
+}
 
 function onAnswer(midi: number) {
   practice.submitAnswer(midi)
 }
 
 function goBack() {
-  const target = practice.isWrongBookReview ? '/wrong-book' : '/'
+  const target = practice.isWrongBookReview
+    ? '/wrong-book'
+    : practice.isMelodyPractice
+      ? '/melody'
+      : '/'
   practice.reset()
   router.push(target)
 }
@@ -116,6 +144,8 @@ function goBack() {
 function retry() {
   if (practice.isWrongBookReview) {
     practice.startWrongBookReview()
+  } else if (practice.isMelodyPractice) {
+    practice.startMelodyPractice(practice.barsPerSection)
   } else if (practice.currentGroup) {
     practice.startPractice(practice.currentGroup)
   }
@@ -134,6 +164,14 @@ function formatElapsed(ms: number): string {
   overflow: hidden;
 }
 
+.section-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 0 16px 4px;
+  flex-shrink: 0;
+}
+
 .staff-area {
   flex: 1;
   display: flex;
@@ -141,6 +179,7 @@ function formatElapsed(ms: number): string {
   justify-content: center;
   padding: 0 16px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .keyboard-area {

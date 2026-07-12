@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "midi:generate": "tsx scripts/generate-sample-midis.ts",
+    "midi:convert": "tsx scripts/convert-midi.ts",
+    "midi:build": "npm run midi:generate && npm run midi:convert",
+    "midi:verify": "tsx scripts/verify-melody.ts"
   },
   "dependencies": {
     "pinia": "^3.0.4",
@@ -15,9 +19,11 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@tonejs/midi": "^2.0.28",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.2",
     "@vue/tsconfig": "^0.8.1",
+    "tsx": "^4.23.0",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
     "vue-tsc": "^3.1.5",
